@@ -1,16 +1,5 @@
 package main
 
-/*
-#cgo CFLAGS: -I . -I/usr/include/glib-2.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -pthread -I/usr/include/gtk-2.0 -I/usr/lib/x86_64-linux-gnu/gtk-2.0/include -I/usr/include/gio-unix-2.0/ -I/usr/include/cairo -I/usr/include/pango-1.0 -I/usr/include/atk-1.0 -I/usr/include/cairo -I/usr/include/pixman-1 -I/usr/include/libpng12 -I/usr/include/gdk-pixbuf-2.0 -I/usr/include/libpng12 -I/usr/include/pango-1.0 -I/usr/include/harfbuzz -I/usr/include/pango-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/freetype2
-#cgo LDFLAGS: -L . -lnotify -lgdk_pixbuf-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0
-
-#include <libnotify/notify.h>
-
-void c_callback(NotifyNotification *notification, char *action, gpointer user_data);
-void sendNotification(char *action, char *label, char *summary, char *body);
-*/
-import "C"
-//import notify "github.com/mqu/go-notify"
 import (
 	"bytes"
 	"fmt"
@@ -23,12 +12,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-//	"github.com/mattn/go-gtk/gtk"
 	"github.com/Unknwon/com"
-)
-
-const (
-	DELAY = 3000
 )
 
 func Listen(port int) {
@@ -216,46 +200,6 @@ func AskUserForPermission(request string) bool {
 	return true
 }
 
-//export callOnMeGo
-func callOnMeGo(notification *C.NotifyNotification, action string, user_data unsafe.Pointer) {
-	fmt.Println("in go callback")
-}
-
 func main() {
-//	notify.Init("Hello world!")
-//	hello := notify.NotificationNew("Hello World!",
-//		"This is an example notification.", "")
-//
-//	if hello == nil {
-//		fmt.Fprintf(os.Stderr, "Unable to create a new notification\n")
-//		return
-//	}
-//
-//	fmt.Println("here")
-//	C.bridge((*C.struct__NotifyNotification)(unsafe.Pointer(hello)));
-////	hello.AddAction("action", "label", (C.NotifyActionCallback)(unsafe.Pointer(C.callOnMeGo_cgo)), nil)
-////	C.notify_notification_add_action((*C.struct__NotifyNotification)(unsafe.Pointer(hello)), C.CString("action"), C.CString("label"), (C.NotifyActionCallback)(unsafe.Pointer(C.callOnMeGo_cgo)), nil, nil)
-//	hello.SetTimeout(3000)
-//	fmt.Println("here")
-//
-//	hello.Show()
-//	fmt.Println("here")
-//
-//	time.Sleep(DELAY * 1000000)
-//	fmt.Println("here")
-//
-//	hello.Close()
-//	fmt.Println("here")
-
-//	gtk.Init(nil)
-//	C.notify_init(C.CString("app name"))
-//	C.sendNotification(C.CString("action"), C.CString("label"), C.CString("summary"), C.CString("body"))
-//	fmt.Println("before Main()")
-//	go gtk.Main()
-//	fmt.Println("after Main()")
-//	C.notify_uninit();
-
 	Listen(2222)
-
-//	notify.UnInit()
 }
