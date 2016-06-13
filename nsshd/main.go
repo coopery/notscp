@@ -94,74 +94,71 @@ func handleServerConn(keyID string, chans <-chan ssh.NewChannel) {
 }
 
 func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request) {
+	req := <-in
+
+	defer sendExitStatus(ch, req)
 	defer ch.Close()
 
-	// TODO: Figure out if there's a request type to close channel
-	// so there's no client side hanging
-	for req := range in {
-		fmt.Printf("Handling %s request.\n", req.Type)
+	fmt.Printf("Handling %s request.\n", req.Type)
 
-		switch req.Type {
-		case "shell":
-			ch.Write([]byte("Nope no shell sorry.\n"))
-			continue
+	switch req.Type {
+	case "shell":
+		ch.Write([]byte("Nope no shell sorry.\n"))
+		return
 
-		case "exec":
-			// Payload will be: garbage? scp flags directory
-			cmdName := cleanCommand(string(req.Payload))
-			fmt.Println("Command: " + cmdName)
+	case "exec":
+		// Payload will be: garbage? scp flags directory
+		cmdName := cleanCommand(string(req.Payload))
+		fmt.Println("Command: " + cmdName)
 
-			cmdFields := strings.Fields(cmdName)
-			targetDir := cmdFields[len(cmdFields) - 1]
-			fmt.Println("to dir", targetDir)
+		cmdFields := strings.Fields(cmdName)
+		targetDir := cmdFields[len(cmdFields) - 1]
+		fmt.Println("to dir", targetDir)
 
-			if cmdFields[0] != "scp" {
-				fmt.Println("Illegal command given.")
-				continue
-			}
+		if cmdFields[0] != "scp" {
+			fmt.Println("Illegal command given.")
+			return
+		}
 
-			header := RecvNotScpHeader(ch)
-			notscp_req := ParseNotScpHeader(header)
+		header := RecvNotScpHeader(ch)
+		notscp_req := ParseNotScpHeader(header)
 
-			perm := AskUserForPermission(notscp_req)
-			if !perm {
-				fmt.Println("Permission denied for request.")
-				sendExitStatus(ch, req)
-				return
-			}
-
-			// Continue with scp
-			cmdFields = cmdFields[1:]
-			cmd := exec.Command("scp", cmdFields...)
-
-			// pipe to send scp request (header + file) to local scp
-			input, err := cmd.StdinPipe()
-			if err != nil {
-				fmt.Println("Error getting stdin pipe.")
-				continue
-			}
-
-			fmt.Println("Executing command.")
-
-			err = cmd.Start()
-			if err != nil {
-				fmt.Println("Error starting command.")
-				continue
-			}
-
-			io.Copy(input, ch)
-			fmt.Fprint(input, "\n")
-
+		perm := AskUserForPermission(notscp_req)
+		if !perm {
+			fmt.Println("Permission denied for request.")
 			sendExitStatus(ch, req)
+			return
+		}
 
-			err = cmd.Wait()
-			if err != nil {
-				fmt.Println("Error waiting for command to return.")
+		// Continue with scp
+		cmdFields = cmdFields[1:]
+		cmd := exec.Command("scp", cmdFields...)
 
-				// TODO: should eventually be a continue, also figure out
-				// why this happens every single time (seems bad)
-				return
-			}
+		// pipe to send scp request (header + file) to local scp
+		input, err := cmd.StdinPipe()
+		if err != nil {
+			fmt.Println("Error getting stdin pipe.")
+			return
+		}
+
+		fmt.Println("Executing command.")
+
+		err = cmd.Start()
+		if err != nil {
+			fmt.Println("Error starting command.")
+			return
+		}
+
+		io.Copy(input, ch)
+		fmt.Fprint(input, "\n")
+
+		sendExitStatus(ch, req)
+
+		err = cmd.Wait()
+		if err != nil {
+			// TODO: figure out why this happens every single time (seems bad)
+			fmt.Println("Error waiting for command to return.")
+			return
 		}
 	}
 }
