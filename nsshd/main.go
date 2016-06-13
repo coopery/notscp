@@ -96,7 +96,8 @@ func handleServerConn(keyID string, chans <-chan ssh.NewChannel) {
 func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request) {
 	defer ch.Close()
 
-	// TODO: Figure out if there's request type to close channel so no hanging
+	// TODO: Figure out if there's a request type to close channel
+	// so there's no client side hanging
 	for req := range in {
 		fmt.Printf("Handling %s request.\n", req.Type)
 
@@ -125,7 +126,8 @@ func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request) {
 			perm := AskUserForPermission(notscp_req)
 			if !perm {
 				fmt.Println("Permission denied for request.")
-				continue
+				sendExitStatus(ch, req)
+				return
 			}
 
 			// Continue with scp
@@ -150,9 +152,7 @@ func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request) {
 			io.Copy(input, ch)
 			fmt.Fprint(input, "\n")
 
-			// say we good
-			req.Reply(true, []byte{})
-			ch.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
+			sendExitStatus(ch, req)
 
 			err = cmd.Wait()
 			if err != nil {
@@ -198,6 +198,11 @@ func ParseNotScpHeader(header string) string {
 	return header
 }
 
+func sendExitStatus(ch ssh.Channel, req *ssh.Request) {
+	req.Reply(true, []byte{})
+	ch.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
+}
+
 /**
  * Called when a client tries to initiate a connection with the server.
  */
@@ -240,19 +245,16 @@ func AskUserForPermission(request string) bool {
 }
 
 func main() {
-	portPtr := flag.Int("p", 2222, "Port to listen for requests on.")
+	port := flag.Int("p", 2222, "Port to listen for requests on.")
 
 	// TODO: change to actual default keypath (see sshd -h)
-	hostKeyPtr := flag.String("keypath",
+	hostKey := flag.String("keypath",
 		"/home/coopery/notscp/keys/ssh_host_rsa_key",
 		"Path to host rsa key file")
 
 	flag.Parse()
 
-	port := *portPtr
-	hostKey := *hostKeyPtr
+	fmt.Printf("Listening on port %d...\n", *port)
 
-	fmt.Printf("Listening on port %d...\n", port)
-
-	Listen(port, hostKey)
+	Listen(*port, *hostKey)
 }
