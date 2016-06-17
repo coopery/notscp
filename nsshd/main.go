@@ -40,7 +40,7 @@ func Listen(port int, hostKeyPath string) {
 
 func listen(config *ssh.ServerConfig, port int) {
 	// Start listening for incoming tcp connections
-	listener, err := net.Listen("tcp", "127.0.0.1:" + com.ToStr(port))
+	listener, err := net.Listen("tcp", "127.0.0.1:"+com.ToStr(port))
 	if err != nil {
 		fmt.Printf("Error trying to listen to port %d\n", port)
 		return
@@ -69,15 +69,15 @@ func listen(config *ssh.ServerConfig, port int) {
 }
 
 func handleServerConn(keyID string, chans <-chan ssh.NewChannel) {
-	fmt.Println("In handleServerConn()");
+	fmt.Println("In handleServerConn()")
 
 	// TODO: figure out why there can be multiple channels
 	for newChan := range chans {
-		fmt.Println("New channel creation request.");
+		fmt.Println("New channel creation request.")
 
 		if chanType := newChan.ChannelType(); chanType != "session" {
-			fmt.Println("Bad channel creation request for %s\n", chanType);
-			newChan.Reject(ssh.UnknownChannelType, "Unknown channel type");
+			fmt.Println("Bad channel creation request for %s\n", chanType)
+			newChan.Reject(ssh.UnknownChannelType, "Unknown channel type")
 			continue
 		}
 
@@ -87,7 +87,7 @@ func handleServerConn(keyID string, chans <-chan ssh.NewChannel) {
 			continue
 		}
 
-		fmt.Println("Accepted channel.");
+		fmt.Println("Accepted channel.")
 
 		go serviceSshChannel(ch, reqs)
 	}
@@ -112,7 +112,7 @@ func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request) {
 		fmt.Println("Command: " + cmdName)
 
 		cmdFields := strings.Fields(cmdName)
-		targetDir := cmdFields[len(cmdFields) - 1]
+		targetDir := cmdFields[len(cmdFields)-1]
 		fmt.Println("to dir", targetDir)
 
 		if cmdFields[0] != "scp" {
@@ -123,7 +123,8 @@ func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request) {
 		header := RecvNotScpHeader(ch)
 		notscp_req := ParseNotScpHeader(header)
 
-		perm := AskUserForPermission(notscp_req)
+		perm := AskUserForPermission(
+			fmt.Sprintf("Allow scp request? (y/n): %s", notscp_req))
 		if !perm {
 			fmt.Println("Permission denied for request.")
 			sendExitStatus(ch, req)
@@ -204,39 +205,36 @@ func sendExitStatus(ch ssh.Channel, req *ssh.Request) {
  * Called when a client tries to initiate a connection with the server.
  */
 func AuthenticateClient(conn ssh.ConnMetadata,
-		password []byte) (*ssh.Permissions, error) {
+	password []byte) (*ssh.Permissions, error) {
 
-	fmt.Printf("Got request from user '%v' with password '%v'\n",
-		conn.User(), string(password))
+	user := conn.User()
 
-	userPerm := AskUserForPermission(conn.User() + ":" + string(password))
+	fmt.Printf("Got request from user '%v' with password '%v'\n", user, string(password))
+
+	question := fmt.Sprintf("Give %s permission to connect? (y/n)", user)
+	userPerm := AskUserForPermission(question)
 
 	if !userPerm {
 		return nil, errors.New("Permission denied for connection.")
 	}
 
-	perms := ssh.Permissions {
+	perms := ssh.Permissions{
 		Extensions: map[string]string{"user_id": conn.User()},
 	}
 
 	return &perms, nil
 }
 
-func AskUserForPermission(request string) bool {
-	fmt.Printf("Received request: %s\n", request)
-
+func AskUserForPermission(question string) bool {
 	for input := ""; input != "y"; {
-		fmt.Println("Allow scp request (y/n)?")
+		fmt.Println(question)
 
 		fmt.Scanln(&input)
 
 		if input == "n" {
-			fmt.Println("Rejecting request")
 			return false
 		}
 	}
-
-	fmt.Println("Giving permission for request")
 
 	return true
 }
