@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -9,10 +10,15 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
+
+type Location struct {
+	user, host, path string
+}
 
 func getKeyFile(keypath string) (ssh.Signer, error) {
 	user, err := user.Current()
@@ -76,14 +82,14 @@ func (ssh_conf *ConnConfig) connect() (*ssh.Session, error) {
 	return session, nil
 }
 
-func (ssh_conf *ConnConfig) Scp(srcFile string, dstDir string) error {
+func (ssh_conf *ConnConfig) Scp(srcLoc, dstLoc Location) error {
 	session, err := ssh_conf.connect()
 	if err != nil { return err }
 	defer session.Close()
 
-	targetFile := filepath.Base(srcFile)
+	targetFile := filepath.Base(srcLoc.path)
 
-	src, err := os.Open(srcFile)
+	src, err := os.Open(srcLoc.path)
 	if err != nil { return err }
 
 	srcStat, err := src.Stat()
@@ -115,7 +121,7 @@ func (ssh_conf *ConnConfig) Scp(srcFile string, dstDir string) error {
 		fmt.Println("Finished copying to remote")
 	}()
 
-	err = session.Run(fmt.Sprintf("scp -t %s", dstDir))
+	err = session.Run(fmt.Sprintf("scp -t %s", dstLoc.path))
 	if err != nil {
 		fmt.Println("Err", err)
 		return err
@@ -125,13 +131,54 @@ func (ssh_conf *ConnConfig) Scp(srcFile string, dstDir string) error {
 	return nil
 }
 
+func validateLocation(location string) bool {
+	// yeah totally valid (TODO)
+	return true
+}
+
+// user@host:path
+func parseLocation(loc_string string) (Location, error) {
+	var loc Location
+
+	valid := validateLocation(loc_string)
+	if !valid {
+		return loc, errors.New("Invalid source or destination. Format: user@host:path")
+	}
+
+	// user
+	if index := strings.Index(loc_string, "@"); index != -1 {
+		loc.user = loc_string[:index]
+		loc_string = loc_string[index+1:]
+	}
+
+	// host
+	if index := strings.Index(loc_string, ":"); index != -1 {
+		loc.host = loc_string[:index]
+		loc_string = loc_string[index+1:]
+	}
+
+	// path is what's left
+	loc.path = loc_string
+
+	return loc, nil
+}
+
 func main() {
 	if len(os.Args) != 3 {
 		fmt.Println("Need source and destination")
 		return
 	}
 
-	src, dst := os.Args[1], os.Args[2]
+	src, err := parseLocation(os.Args[1])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	dst, err := parseLocation(os.Args[2])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 
 	fmt.Println("Copying from %s to %s", src, dst)
 
