@@ -18,6 +18,7 @@ import (
 
 type Location struct {
 	user, host, path string
+	remote bool
 }
 
 func getKeyFile(keypath string) (ssh.Signer, error) {
@@ -132,7 +133,7 @@ func (ssh_conf *ConnConfig) Scp(srcLoc, dstLoc Location) error {
 }
 
 func validateLocation(location string) bool {
-	// yeah totally valid (TODO)
+	// yeah totally valid aka TODO
 	return true
 }
 
@@ -153,8 +154,11 @@ func parseLocation(loc_string string) (Location, error) {
 
 	// host
 	if index := strings.Index(loc_string, ":"); index != -1 {
+		loc.remote = true
 		loc.host = loc_string[:index]
 		loc_string = loc_string[index+1:]
+	} else {
+		loc.remote = false
 	}
 
 	// path is what's left
@@ -179,16 +183,27 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
+	}
 
-	fmt.Println("Copying from %s to %s", src, dst)
+	if (src.remote && dst.remote) {
+		fmt.Println("Sorry can't handle remote-to-remote copies.")
+		os.Exit(1)
+	}
+	if (!src.remote && !dst.remote) {
+		fmt.Println("why?")
+		os.Exit(1)
+	}
 
+	// TODO: change to actual things
 	config := ConnConfig{
 		User: "coopery",
 		Server: "127.0.0.1",
 		Key: "notscp/keys/ssh_host_rsa_key",
 		Port: "2222",
-		Password: "hkels",
+		Password: "",
 	}
+
+	fmt.Printf("Copying from %s to %s\n", src, dst)
 
 	config.Scp(src, dst)
 }
