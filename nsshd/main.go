@@ -1,5 +1,15 @@
 package main
 
+/*
+#cgo CFLAGS: -I . -I/usr/include/glib-2.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -pthread -I/usr/include/gtk-2.0 -I/usr/lib/x86_64-linux-gnu/gtk-2.0/include -I/usr/include/gio-unix-2.0/ -I/usr/include/cairo -I/usr/include/pango-1.0 -I/usr/include/atk-1.0 -I/usr/include/cairo -I/usr/include/pixman-1 -I/usr/include/libpng12 -I/usr/include/gdk-pixbuf-2.0 -I/usr/include/libpng12 -I/usr/include/pango-1.0 -I/usr/include/harfbuzz -I/usr/include/pango-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/freetype2
+#cgo LDFLAGS: -L . -lnotify -lgdk_pixbuf-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0
+
+#include <libnotify/notify.h>
+
+void c_callback(NotifyNotification *notification, char *action, gpointer user_data);
+*/
+import "C"
+import notify "github.com/mqu/go-notify"
 import (
 	"bytes"
 	"errors"
@@ -8,8 +18,10 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -94,6 +106,13 @@ func handleServerConn(keyID string, chans <-chan ssh.NewChannel) {
 }
 
 func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request) {
+	// get notscp header
+//	size_buf := make([]byte, 1)
+//	recvd, err := ch.Read(size_buf)
+//	if err != nil { fmt.Println(err) }
+//
+//	size = size_buf[0]
+
 	req := <-in
 
 	defer sendExitStatus(ch, req)
@@ -205,7 +224,7 @@ func sendExitStatus(ch ssh.Channel, req *ssh.Request) {
  * Called when a client tries to initiate a connection with the server.
  */
 func AuthenticateClient(conn ssh.ConnMetadata,
-	password []byte) (*ssh.Permissions, error) {
+		password []byte) (*ssh.Permissions, error) {
 
 	user := conn.User()
 
@@ -239,6 +258,31 @@ func AskUserForPermission(question string) bool {
 	return true
 }
 
+//export callOnMeGo
+//func callOnMeGo(notification *C.NotifyNotification, action string, user_data unsafe.Pointer) {
+//	fmt.Println("in go callback")
+//}
+
+func sendNotification(title, description string) {
+	notification := notify.NotificationNew(title, description, "")
+
+	if notification == nil {
+		fmt.Fprintf(os.Stderr, "Unable to create a notification.\n")
+		return
+	}
+
+	notification.SetTimeout(10000)
+
+	// lol place attempts at notification callback here
+//	notification.AddAction("action", "label", (C.NotifyActionCallback)(unsafe.Pointer(C.callOnMeGo_cgo)), nil)
+//	C.bridge((*C.struct__NotifyNotification)(unsafe.Pointer(hello)));
+//	C.notify_notification_add_action((*C.struct__NotifyNotification)(unsafe.Pointer(hello)), C.CString("action"), C.CString("label"), (C.NotifyActionCallback)(unsafe.Pointer(C.callOnMeGo_cgo)), nil, nil)
+
+	notification.Show()
+	time.Sleep(1000000)
+	notification.Close()
+}
+
 func main() {
 	port := flag.Int("p", 2222, "Port to listen for requests on.")
 
@@ -249,7 +293,11 @@ func main() {
 
 	flag.Parse()
 
+	notify.Init("notscp")
+
 	fmt.Printf("Listening on port %d...\n", *port)
 
 	Listen(*port, *hostKey)
+
+	notify.UnInit()
 }

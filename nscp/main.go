@@ -1,19 +1,17 @@
 package main
 
 import (
-	"bytes"
+//	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 )
 
 type Location struct {
@@ -50,19 +48,8 @@ type ConnConfig struct {
 }
 
 func (ssh_conf *ConnConfig) connect() (*ssh.Session, error) {
-	auths := []ssh.AuthMethod{}
-
-	if ssh_conf.Password != "" {
-		auths = append(auths, ssh.Password(ssh_conf.Password))
-	}
-
-	if sshAgent, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK")); err == nil {
-		auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(sshAgent).Signers))
-		defer sshAgent.Close()
-	}
-
-	if pubkey, err := getKeyFile(ssh_conf.Key); err == nil {
-		auths = append(auths, ssh.PublicKeys(pubkey))
+	auths := []ssh.AuthMethod{
+		ssh.Password(ssh_conf.Password),
 	}
 
 	config := &ssh.ClientConfig{
@@ -72,6 +59,7 @@ func (ssh_conf *ConnConfig) connect() (*ssh.Session, error) {
 
 	client, err := ssh.Dial("tcp", ssh_conf.Server + ":" + ssh_conf.Port, config)
 	if err != nil {
+	fmt.Println(err)
 		return nil, err
 	}
 
@@ -79,6 +67,7 @@ func (ssh_conf *ConnConfig) connect() (*ssh.Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("here")
 
 	return session, nil
 }
@@ -100,22 +89,25 @@ func (ssh_conf *ConnConfig) Scp(srcLoc, dstLoc Location) error {
 		w, _ := session.StdinPipe()
 		defer w.Close()
 
+		fmt.Println("here")
 		// Create notscp header [F/D filename size F/D filename size ...\n]
-		send_buf := new(bytes.Buffer)
-		file_type := "F"
-		if srcStat.IsDir() {
-			file_type = "D"
-		}
-		fmt.Fprintln(send_buf, file_type, srcStat.Name(), srcStat.Size())
-
-		// Send notscp header size, then header
+//		send_buf := new(bytes.Buffer)
+//		file_type := "F"
+//		if srcStat.IsDir() {
+//			file_type = "D"
+//		}
+//		fmt.Fprintln(send_buf, file_type, srcStat.Name(), srcStat.Size())
+//
+//		// Send notscp header size, then header
 //		fmt.Fprint(w, send_buf.Len(), send_buf)
-		fmt.Fprint(w, send_buf)
+//		fmt.Fprint(w, send_buf)
 
 		// Send scp header [type + mode, length, filename]
 		fmt.Fprintln(w, "C0644", srcStat.Size(), targetFile)
+		fmt.Println("here")
 
 		// Send file data and sentinel
+		fmt.Fprint(w, "\x00")
 		io.Copy(w, src)
 		fmt.Fprint(w, "\x00")
 
@@ -191,7 +183,7 @@ func main() {
 	}
 	if (!src.remote && !dst.remote) {
 		fmt.Println("why?")
-		os.Exit(1)
+//		os.Exit(1)
 	}
 
 	// TODO: change to actual things
