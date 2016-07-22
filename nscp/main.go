@@ -1,7 +1,7 @@
 package main
 
 import (
-//	"bytes"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -89,22 +89,19 @@ func (ssh_conf *ConnConfig) Scp(srcLoc, dstLoc Location) error {
 		w, _ := session.StdinPipe()
 		defer w.Close()
 
-		fmt.Println("here")
 		// Create notscp header [F/D filename size F/D filename size ...\n]
-//		send_buf := new(bytes.Buffer)
-//		file_type := "F"
-//		if srcStat.IsDir() {
-//			file_type = "D"
-//		}
-//		fmt.Fprintln(send_buf, file_type, srcStat.Name(), srcStat.Size())
-//
-//		// Send notscp header size, then header
-//		fmt.Fprint(w, send_buf.Len(), send_buf)
-//		fmt.Fprint(w, send_buf)
+		send_buf := new(bytes.Buffer)
+		file_type := "F"
+		if srcStat.IsDir() {
+			file_type = "D"
+		}
+		fmt.Fprintln(send_buf, file_type, srcStat.Name(), srcStat.Size())
+
+		// Send notscp header followed by a newline
+		fmt.Fprint(w, send_buf)
 
 		// Send scp header [type + mode, length, filename]
 		fmt.Fprintln(w, "C0644", srcStat.Size(), targetFile)
-		fmt.Println("here")
 
 		// Send file data and sentinel
 		fmt.Fprint(w, "\x00")
@@ -114,7 +111,9 @@ func (ssh_conf *ConnConfig) Scp(srcLoc, dstLoc Location) error {
 		fmt.Println("Finished copying to remote")
 	}()
 
-	err = session.Run(fmt.Sprintf("scp -t %s", dstLoc.path))
+	remote_scp_cmd := fmt.Sprintf("scp -v -t %s", dstLoc.path)
+	fmt.Println(remote_scp_cmd)
+	err = session.Run(remote_scp_cmd)
 	if err != nil {
 		fmt.Println("Err", err)
 		return err

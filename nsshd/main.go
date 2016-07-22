@@ -20,6 +20,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/user"
 	"strings"
 	"time"
 
@@ -80,8 +81,9 @@ func listen(config *ssh.ServerConfig, port int) {
 	}
 }
 
-func handleServerConn(keyID string, chans <-chan ssh.NewChannel) {
+func handleServerConn(user string, chans <-chan ssh.NewChannel) {
 	fmt.Println("In handleServerConn()")
+	fmt.Println("Connection with user: ", user)
 
 	// TODO: figure out why there can be multiple channels
 	for newChan := range chans {
@@ -101,18 +103,11 @@ func handleServerConn(keyID string, chans <-chan ssh.NewChannel) {
 
 		fmt.Println("Accepted channel.")
 
-		go serviceSshChannel(ch, reqs)
+		go serviceSshChannel(ch, reqs, user)
 	}
 }
 
-func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request) {
-	// get notscp header
-//	size_buf := make([]byte, 1)
-//	recvd, err := ch.Read(size_buf)
-//	if err != nil { fmt.Println(err) }
-//
-//	size = size_buf[0]
-
+func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request, user string) {
 	req := <-in
 
 	defer sendExitStatus(ch, req)
@@ -151,8 +146,14 @@ func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request) {
 		}
 
 		// Continue with scp
-		cmdFields = cmdFields[1:]
-		cmd := exec.Command("scp", cmdFields...)
+		expanded, err := tildeExpansion(cmdFields[3], user)
+		cmdFields[3] = expanded
+		cmd := exec.Command(cmdFields[0], cmdFields[1:]...)
+		fmt.Println(cmd.Path, cmd.Args)
+
+		// Send scp stderr to our stderr
+		cmd.Stderr = os.Stderr
+		cmd.Stdout = os.Stdout
 
 		// pipe to send scp request (header + file) to local scp
 		input, err := cmd.StdinPipe()
@@ -172,12 +173,15 @@ func serviceSshChannel(ch ssh.Channel, in <-chan *ssh.Request) {
 		io.Copy(input, ch)
 		fmt.Fprint(input, "\n")
 
-		sendExitStatus(ch, req)
+		//sendExitStatus(ch, req)
 
 		err = cmd.Wait()
 		if err != nil {
 			// TODO: figure out why this happens every single time (seems bad)
+			// ** Need to send output of scp fork to other side, respond to
+			// messages, like E with a \x00
 			fmt.Println("Error waiting for command to return.")
+			fmt.Println(err)
 			return
 		}
 	}
@@ -192,6 +196,32 @@ func cleanCommand(cmd string) string {
 		return cmd
 	}
 	return cmd[i:]
+}
+
+/**
+ * Expand tilde in path to home directory if possible
+ * TODO: figure out how to run "sh -c 'scp ...'" instead
+ * of "scp ..." so we can let the shell do this
+ */
+func tildeExpansion(path, username string) (string, error) {
+	if string(path[0]) != "~" {
+		return path, nil
+	}
+
+	user_account, err := user.Lookup(username)
+	if err != nil {
+		fmt.Println(err)
+		return path, err
+	}
+
+	home_dir := user_account.HomeDir
+
+	expanded := strings.Replace(path, "~", home_dir, 1)
+
+	fmt.Println("home directory:", home_dir)
+	fmt.Println("home directory:", expanded)
+
+	return expanded, nil
 }
 
 func RecvNotScpHeader(ch ssh.Channel) string {
@@ -224,7 +254,7 @@ func sendExitStatus(ch ssh.Channel, req *ssh.Request) {
  * Called when a client tries to initiate a connection with the server.
  */
 func AuthenticateClient(conn ssh.ConnMetadata,
-		password []byte) (*ssh.Permissions, error) {
+	password []byte) (*ssh.Permissions, error) {
 
 	user := conn.User()
 
@@ -274,9 +304,9 @@ func sendNotification(title, description string) {
 	notification.SetTimeout(10000)
 
 	// lol place attempts at notification callback here
-//	notification.AddAction("action", "label", (C.NotifyActionCallback)(unsafe.Pointer(C.callOnMeGo_cgo)), nil)
-//	C.bridge((*C.struct__NotifyNotification)(unsafe.Pointer(hello)));
-//	C.notify_notification_add_action((*C.struct__NotifyNotification)(unsafe.Pointer(hello)), C.CString("action"), C.CString("label"), (C.NotifyActionCallback)(unsafe.Pointer(C.callOnMeGo_cgo)), nil, nil)
+	//notification.AddAction("action", "label", (C.NotifyActionCallback)(unsafe.Pointer(C.callOnMeGo_cgo)), nil)
+	//C.bridge((*C.struct__NotifyNotification)(unsafe.Pointer(hello)));
+	//C.notify_notification_add_action((*C.struct__NotifyNotification)(unsafe.Pointer(hello)), C.CString("action"), C.CString("label"), (C.NotifyActionCallback)(unsafe.Pointer(C.callOnMeGo_cgo)), nil, nil)
 
 	notification.Show()
 	time.Sleep(1000000)
